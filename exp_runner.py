@@ -332,14 +332,14 @@ class Runner:
         bound_min = torch.tensor(self.dataset.object_bbox_min, dtype=torch.float32)
         bound_max = torch.tensor(self.dataset.object_bbox_max, dtype=torch.float32)
 
-        vertices, triangles =\
+        vertices, triangles, ptcloud_ =\
             self.renderer.extract_geometry(bound_min, bound_max, resolution=resolution, threshold=threshold)
         os.makedirs(os.path.join(self.base_exp_dir, 'meshes'), exist_ok=True)
 
-        # print("vertices shape: ", np.shape(vertices))
-        # pcd = o3d.geometry.PointCloud()
-        # pcd.points = o3d.utility.Vector3dVector(vertices)
-        # o3d.io.write_point_cloud(os.path.join(self.base_exp_dir, 'points{:0>8d}.ply'.format(self.iter_step)), pcd)
+        print("ptcloud shape: ", np.shape(ptcloud_))
+        pcd = o3d.geometry.PointCloud()
+        pcd.points = o3d.utility.Vector3dVector(ptcloud_)
+        o3d.io.write_point_cloud(os.path.join(self.base_exp_dir, 'points{:0>8d}.ply'.format(self.iter_step)), pcd)
 
         if world_space:
             vertices = vertices * self.dataset.scale_mats_np[0][0, 0] + self.dataset.scale_mats_np[0][:3, 3][None]
