@@ -1,4 +1,4 @@
-from pose_utils import gen_poses
+from pose_utils_existingCOLMAP import gen_poses
 import sys
 import argparse
 parser = argparse.ArgumentParser()

@@ -15,11 +15,14 @@ from pyhocon import ConfigFactory
 from models.dataset import Dataset
 from models.fields import RenderingNetwork, SDFNetwork, SingleVarianceNetwork, NeRF
 from models.renderer import NeuSRenderer
+import open3d as o3d
 
 
 class Runner:
     def __init__(self, conf_path, mode='train', case='CASE_NAME', is_continue=False):
         self.device = torch.device('cuda')
+        print("cuda_available: ", torch.cuda.is_available())
+        print("cuda device: ", torch.cuda.device_count())
 
         # Configuration
         self.conf_path = conf_path
@@ -332,6 +335,11 @@ class Runner:
         vertices, triangles =\
             self.renderer.extract_geometry(bound_min, bound_max, resolution=resolution, threshold=threshold)
         os.makedirs(os.path.join(self.base_exp_dir, 'meshes'), exist_ok=True)
+
+        # print("vertices shape: ", np.shape(vertices))
+        # pcd = o3d.geometry.PointCloud()
+        # pcd.points = o3d.utility.Vector3dVector(vertices)
+        # o3d.io.write_point_cloud(os.path.join(self.base_exp_dir, 'points{:0>8d}.ply'.format(self.iter_step)), pcd)
 
         if world_space:
             vertices = vertices * self.dataset.scale_mats_np[0][0, 0] + self.dataset.scale_mats_np[0][:3, 3][None]

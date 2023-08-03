@@ -50,7 +50,8 @@ if __name__ == '__main__':
         cam_dict['world_mat_inv_{}'.format(i)] = np.linalg.inv(world_mat)
 
 
-    pcd = trimesh.load(os.path.join(work_dir, 'sparse_points_interest.ply'))
+    # pcd = trimesh.load(os.path.join(work_dir, 'sparse_points_interest.ply'))
+    pcd = trimesh.load(os.path.join(work_dir, 'sparse_points.ply'))
     vertices = pcd.vertices
     bbox_max = np.max(vertices, axis=0)
     bbox_min = np.min(vertices, axis=0)
