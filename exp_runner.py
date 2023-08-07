@@ -376,16 +376,16 @@ class Runner:
         bound_min = torch.tensor(self.dataset.object_bbox_min, dtype=torch.float32)
         bound_max = torch.tensor(self.dataset.object_bbox_max, dtype=torch.float32)
 
-        # vertices, triangles =\
-        #     self.renderer.extract_geometry(bound_min, bound_max, resolution=resolution, threshold=threshold)
-        vertices, triangles, ptcloud_ =\
+        vertices, triangles =\
             self.renderer.extract_geometry(bound_min, bound_max, resolution=resolution, threshold=threshold)
+        # vertices, triangles, ptcloud_ =\
+        #     self.renderer.extract_geometry(bound_min, bound_max, resolution=resolution, threshold=threshold)
         os.makedirs(os.path.join(self.base_exp_dir, 'meshes'), exist_ok=True)
 
-        print("ptcloud shape: ", np.shape(ptcloud_))
-        pcd = o3d.geometry.PointCloud()
-        pcd.points = o3d.utility.Vector3dVector(ptcloud_)
-        o3d.io.write_point_cloud(os.path.join(self.base_exp_dir, 'points{:0>8d}.ply'.format(self.iter_step)), pcd)
+        # print("ptcloud shape: ", np.shape(ptcloud_))
+        # pcd = o3d.geometry.PointCloud()
+        # pcd.points = o3d.utility.Vector3dVector(ptcloud_)
+        # o3d.io.write_point_cloud(os.path.join(self.base_exp_dir, 'points{:0>8d}.ply'.format(self.iter_step)), pcd)
 
         if world_space:
             vertices = vertices * self.dataset.scale_mats_np[0][0, 0] + self.dataset.scale_mats_np[0][:3, 3][None]
@@ -426,6 +426,8 @@ class Runner:
         for i in range(n_frames):
             print(i)
             theta = 2*np.pi/n_frames * i
+            # theta = 2*np.pi/n_frames * i + 2/5*np.pi    # basket
+            # theta = 2*np.pi/n_frames * i - 1/5*np.pi    # tray
             R = np.array([[-sin(theta),     sin(phi)*cos(theta),   -cos(phi)*cos(theta)],
                             [cos(theta),    sin(phi)*sin(theta),   -cos(phi)*sin(theta)],
                             [0,             -cos(phi),               -sin(phi)]])
@@ -434,8 +436,7 @@ class Runner:
                             Z + r*sin(phi)])
             Rt_inv = np.concatenate([R.T, -np.expand_dims(R.T@t, axis=-1)], axis=-1)
             pose_mat = np.concatenate([Rt_inv, np.array([[0., 0., 0., 1.]])], axis=0)
-            print("\n", i, "-th pose_mat:\n", pose_mat)
-            images.append(self.render_query_image(pose_mat, resolution_level=4))
+            images.append(self.render_query_image(pose_mat, resolution_level=2))
         # for i in range(n_frames):
         #     images.append(images[n_frames - i - 1])
 
@@ -484,10 +485,10 @@ if __name__ == '__main__':
         img_idx_1 = int(img_idx_1)
         runner.interpolate_view(img_idx_0, img_idx_1)
     elif args.mode == 'render':
-        # X, Y, Z, r, phi = 0.39, 0.0, 0.025, 0.25, np.pi/6.0     # 1.tetra
+        X, Y, Z, r, phi = 0.39, 0.0, 0.025, 0.25, np.pi/6.0     # 1.tetra
         # X, Y, Z, r, phi = 0.41, 0.0, 0.04, 0.25, np.pi/6.0        # 2.hexa
         # X, Y, Z, r, phi = 0.415, 0.015, 0.05, 0.3, np.pi/6.0     # 3.dodec
         # X, Y, Z, r, phi = 0.39, 0.0, 0.035, 0.25, np.pi/180.0*40.0     # 4.cube
         # X, Y, Z, r, phi = 0.40, 0.01, 0.055, 0.25, np.pi/180.0*35.0     # 5.basket
-        X, Y, Z, r, phi = 0.49, 0.0, 0.04, 0.25, np.pi/180.0*50.0     # 6.tray
+        # X, Y, Z, r, phi = 0.49, 0.0, 0.04, 0.25, np.pi/180.0*50.0     # 6.tray
         runner.rotate_view(X, Y, Z, r, phi)

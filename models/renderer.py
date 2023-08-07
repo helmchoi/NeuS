@@ -33,16 +33,16 @@ def extract_geometry(bound_min, bound_max, resolution, threshold, query_func):
     b_max_np = bound_max.detach().cpu().numpy()
     b_min_np = bound_min.detach().cpu().numpy()
     
-    print("vertices shape: ", np.shape(vertices))
-    # -------------------
-    where_inside = np.where((u <= threshold + 0.001) * (u >= threshold - 0.001))
-    ptcloud__ = np.concatenate([where_inside[0].reshape((-1,1)), where_inside[1].reshape((-1,1)), where_inside[2].reshape((-1,1))], axis=-1)
-    print("ptcloud__ shape: ", np.shape(ptcloud__))
-    ptcloud_ = ptcloud__ / (resolution - 1.0) * (b_max_np - b_min_np)[None, :] + b_min_np[None, :]
-    # -------------------
+    # print("vertices shape: ", np.shape(vertices))
+    # # -------------------
+    # where_inside = np.where((u <= threshold + 0.001) * (u >= threshold - 0.001))
+    # ptcloud__ = np.concatenate([where_inside[0].reshape((-1,1)), where_inside[1].reshape((-1,1)), where_inside[2].reshape((-1,1))], axis=-1)
+    # print("ptcloud__ shape: ", np.shape(ptcloud__))
+    # ptcloud_ = ptcloud__ / (resolution - 1.0) * (b_max_np - b_min_np)[None, :] + b_min_np[None, :]
+    # # -------------------
 
     vertices = vertices / (resolution - 1.0) * (b_max_np - b_min_np)[None, :] + b_min_np[None, :]
-    return vertices, triangles, ptcloud_
+    return vertices, triangles#, ptcloud_
 
 
 def sample_pdf(bins, weights, n_samples, det=False):

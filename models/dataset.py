@@ -105,10 +105,7 @@ class Dataset:
         world_mat = self.camera_mats_np[0] @ pose_mat
         P = world_mat @ self.scale_mats_np[0]
         P = P[:3, :4]
-        print("P:", P)
         intrinsics, pose = load_K_Rt_from_P(None, P)
-        print("intrinsics: ", intrinsics)
-        print("pose: ", pose)
 
         intrinsics_all = []
         pose_all = []
