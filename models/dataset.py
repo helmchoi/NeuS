@@ -59,6 +59,9 @@ class Dataset:
         # world_mat is a projection matrix from world to image
         self.world_mats_np = [camera_dict['world_mat_%d' % idx].astype(np.float32) for idx in range(self.n_images)]
 
+        # cam_mat
+        self.camera_mats_np = [camera_dict['camera_mat_%d' % idx].astype(np.float32) for idx in range(self.n_images)]
+
         self.scale_mats_np = []
 
         # scale_mat: used for coordinate normalization, we assume the scene to render is inside a unit sphere at origin.
@@ -93,6 +96,39 @@ class Dataset:
         self.object_bbox_max = object_bbox_max[:3, 0]
 
         print('Load data: End')
+
+    def gen_rays_from_mat(self, pose_mat, resolution_level=1):
+        """
+        Generate rays at world space from a pose matrix (i.e., [R^T, -R^T*p])
+        [Assume] camera_mat and scale_mat are constant
+        """
+        world_mat = self.camera_mats_np[0] @ pose_mat
+        P = world_mat @ self.scale_mats_np[0]
+        P = P[:3, :4]
+        print("P:", P)
+        intrinsics, pose = load_K_Rt_from_P(None, P)
+        print("intrinsics: ", intrinsics)
+        print("pose: ", pose)
+
+        intrinsics_all = []
+        pose_all = []
+        intrinsics_all.append(torch.from_numpy(intrinsics).float())
+        pose_all.append(torch.from_numpy(pose).float())
+
+        intrinsics_all = torch.stack(intrinsics_all).to(self.device)
+        intrinsics_all_inv = torch.inverse(intrinsics_all)
+        pose_all = torch.stack(pose_all).to(self.device)
+            
+        l = resolution_level
+        tx = torch.linspace(0, self.W - 1, self.W // l)
+        ty = torch.linspace(0, self.H - 1, self.H // l)
+        pixels_x, pixels_y = torch.meshgrid(tx, ty)
+        p = torch.stack([pixels_x, pixels_y, torch.ones_like(pixels_y)], dim=-1) # W, H, 3
+        p = torch.matmul(intrinsics_all_inv[0, None, None, :3, :3], p[:, :, :, None]).squeeze()  # W, H, 3
+        rays_v = p / torch.linalg.norm(p, ord=2, dim=-1, keepdim=True)  # W, H, 3
+        rays_v = torch.matmul(pose_all[0, None, None, :3, :3], rays_v[:, :, :, None]).squeeze()  # W, H, 3
+        rays_o = pose_all[0, None, None, :3, 3].expand(rays_v.shape)  # W, H, 3
+        return rays_o.transpose(0, 1), rays_v.transpose(0, 1)
 
     def gen_rays_at(self, img_idx, resolution_level=1):
         """

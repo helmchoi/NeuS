@@ -28,15 +28,18 @@ def extract_fields(bound_min, bound_max, resolution, query_func):
 def extract_geometry(bound_min, bound_max, resolution, threshold, query_func):
     print('threshold: {}'.format(threshold))
     u = extract_fields(bound_min, bound_max, resolution, query_func)
-    
-    # -------------------
-    where_inside = np.where(u <= threshold)
-    ptcloud_ = np.concatenate([where_inside[0].reshape((-1,1)), where_inside[1].reshape((-1,1)), where_inside[2].reshape((-1,1))], axis=-1)
-    # -------------------
 
     vertices, triangles = mcubes.marching_cubes(u, threshold)
     b_max_np = bound_max.detach().cpu().numpy()
     b_min_np = bound_min.detach().cpu().numpy()
+    
+    print("vertices shape: ", np.shape(vertices))
+    # -------------------
+    where_inside = np.where((u <= threshold + 0.001) * (u >= threshold - 0.001))
+    ptcloud__ = np.concatenate([where_inside[0].reshape((-1,1)), where_inside[1].reshape((-1,1)), where_inside[2].reshape((-1,1))], axis=-1)
+    print("ptcloud__ shape: ", np.shape(ptcloud__))
+    ptcloud_ = ptcloud__ / (resolution - 1.0) * (b_max_np - b_min_np)[None, :] + b_min_np[None, :]
+    # -------------------
 
     vertices = vertices / (resolution - 1.0) * (b_max_np - b_min_np)[None, :] + b_min_np[None, :]
     return vertices, triangles, ptcloud_

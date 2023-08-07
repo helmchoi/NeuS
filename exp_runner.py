@@ -16,6 +16,21 @@ from models.dataset import Dataset
 from models.fields import RenderingNetwork, SDFNetwork, SingleVarianceNetwork, NeRF
 from models.renderer import NeuSRenderer
 import open3d as o3d
+from math import *
+from prettytable import PrettyTable
+
+def count_parameters(model):
+    table = PrettyTable(["Modules", "Parameters"])
+    total_params = 0
+    for name, parameter in model.named_parameters():
+        if not parameter.requires_grad:
+            continue
+        params = parameter.numel()
+        table.add_row([name, params])
+        total_params += params
+    print(table)
+    print(f"Total Trainable Params: {total_params}")
+    return total_params
 
 
 class Runner:
@@ -64,6 +79,7 @@ class Runner:
         params_to_train = []
         self.nerf_outside = NeRF(**self.conf['model.nerf']).to(self.device)
         self.sdf_network = SDFNetwork(**self.conf['model.sdf_network']).to(self.device)
+        # count_parameters(self.sdf_network)
         self.deviation_network = SingleVarianceNetwork(**self.conf['model.variance_network']).to(self.device)
         self.color_network = RenderingNetwork(**self.conf['model.rendering_network']).to(self.device)
         params_to_train += list(self.nerf_outside.parameters())
@@ -300,6 +316,34 @@ class Runner:
                                         '{:0>8d}_{}_{}.png'.format(self.iter_step, i, idx)),
                            normal_img[..., i])
 
+    def render_query_image(self, pose_mat, resolution_level):
+        """
+        Render view of a camera with certain pose ([R^T, -R^T*p] provided)
+        """
+        rays_o, rays_d = self.dataset.gen_rays_from_mat(pose_mat, resolution_level=resolution_level)
+        H, W, _ = rays_o.shape
+        rays_o = rays_o.reshape(-1, 3).split(self.batch_size)
+        rays_d = rays_d.reshape(-1, 3).split(self.batch_size)
+
+        out_rgb_fine = []
+        for rays_o_batch, rays_d_batch in zip(rays_o, rays_d):
+            near, far = self.dataset.near_far_from_sphere(rays_o_batch, rays_d_batch)
+            background_rgb = torch.ones([1, 3]) if self.use_white_bkgd else None
+
+            render_out = self.renderer.render(rays_o_batch,
+                                              rays_d_batch,
+                                              near,
+                                              far,
+                                              cos_anneal_ratio=self.get_cos_anneal_ratio(),
+                                              background_rgb=background_rgb)
+
+            out_rgb_fine.append(render_out['color_fine'].detach().cpu().numpy())
+
+            del render_out
+
+        img_fine = (np.concatenate(out_rgb_fine, axis=0).reshape([H, W, 3]) * 256).clip(0, 255).astype(np.uint8)
+        return img_fine
+
     def render_novel_image(self, idx_0, idx_1, ratio, resolution_level):
         """
         Interpolate view between two cameras.
@@ -332,6 +376,8 @@ class Runner:
         bound_min = torch.tensor(self.dataset.object_bbox_min, dtype=torch.float32)
         bound_max = torch.tensor(self.dataset.object_bbox_max, dtype=torch.float32)
 
+        # vertices, triangles =\
+        #     self.renderer.extract_geometry(bound_min, bound_max, resolution=resolution, threshold=threshold)
         vertices, triangles, ptcloud_ =\
             self.renderer.extract_geometry(bound_min, bound_max, resolution=resolution, threshold=threshold)
         os.makedirs(os.path.join(self.base_exp_dir, 'meshes'), exist_ok=True)
@@ -351,7 +397,7 @@ class Runner:
 
     def interpolate_view(self, img_idx_0, img_idx_1):
         images = []
-        n_frames = 60
+        n_frames = 20
         for i in range(n_frames):
             print(i)
             images.append(self.render_novel_image(img_idx_0,
@@ -367,6 +413,38 @@ class Runner:
         h, w, _ = images[0].shape
         writer = cv.VideoWriter(os.path.join(video_dir,
                                              '{:0>8d}_{}_{}.mp4'.format(self.iter_step, img_idx_0, img_idx_1)),
+                                fourcc, 30, (w, h))
+
+        for image in images:
+            writer.write(image)
+
+        writer.release()
+
+    def rotate_view(self, X, Y, Z, r, phi):
+        images = []
+        n_frames = 60
+        for i in range(n_frames):
+            print(i)
+            theta = 2*np.pi/n_frames * i
+            R = np.array([[-sin(theta),     sin(phi)*cos(theta),   -cos(phi)*cos(theta)],
+                            [cos(theta),    sin(phi)*sin(theta),   -cos(phi)*sin(theta)],
+                            [0,             -cos(phi),               -sin(phi)]])
+            t = np.array([X + r*cos(phi)*cos(theta),
+                            Y + r*cos(phi)*sin(theta),
+                            Z + r*sin(phi)])
+            Rt_inv = np.concatenate([R.T, -np.expand_dims(R.T@t, axis=-1)], axis=-1)
+            pose_mat = np.concatenate([Rt_inv, np.array([[0., 0., 0., 1.]])], axis=0)
+            print("\n", i, "-th pose_mat:\n", pose_mat)
+            images.append(self.render_query_image(pose_mat, resolution_level=4))
+        # for i in range(n_frames):
+        #     images.append(images[n_frames - i - 1])
+
+        fourcc = cv.VideoWriter_fourcc(*'mp4v')
+        video_dir = os.path.join(self.base_exp_dir, 'render')
+        os.makedirs(video_dir, exist_ok=True)
+        h, w, _ = images[0].shape
+        writer = cv.VideoWriter(os.path.join(video_dir,
+                                             '{:0>8d}_rotate.mp4'.format(self.iter_step)),
                                 fourcc, 30, (w, h))
 
         for image in images:
@@ -405,3 +483,11 @@ if __name__ == '__main__':
         img_idx_0 = int(img_idx_0)
         img_idx_1 = int(img_idx_1)
         runner.interpolate_view(img_idx_0, img_idx_1)
+    elif args.mode == 'render':
+        # X, Y, Z, r, phi = 0.39, 0.0, 0.025, 0.25, np.pi/6.0     # 1.tetra
+        # X, Y, Z, r, phi = 0.41, 0.0, 0.04, 0.25, np.pi/6.0        # 2.hexa
+        # X, Y, Z, r, phi = 0.415, 0.015, 0.05, 0.3, np.pi/6.0     # 3.dodec
+        # X, Y, Z, r, phi = 0.39, 0.0, 0.035, 0.25, np.pi/180.0*40.0     # 4.cube
+        # X, Y, Z, r, phi = 0.40, 0.01, 0.055, 0.25, np.pi/180.0*35.0     # 5.basket
+        X, Y, Z, r, phi = 0.49, 0.0, 0.04, 0.25, np.pi/180.0*50.0     # 6.tray
+        runner.rotate_view(X, Y, Z, r, phi)
